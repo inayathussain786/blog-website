@@ -173,7 +173,7 @@ class NewPost(BlogHandler):
 
     def post(self):
         if not self.user:
-            self.redirect('/blog')
+            self.redirect('/login')
 
         subject = self.request.get('subject')
         content = self.request.get('content')
@@ -209,7 +209,7 @@ class MyPosts(BlogHandler):
     def post(self):
         if not self.user:
             self.logout()
-            self.redirect('/blog')
+            self.redirect('/login')
 
 class EditPosts(BlogHandler):
     def get(self, post_id):
@@ -268,6 +268,8 @@ class DeletePosts(BlogHandler):
             post = db.get(key)
             post.delete()
             self.redirect('/blog/myposts')
+        else:
+            self.redirect('/login')
 
 class CommentHandler(BlogHandler):
     def get(self, post_id):
@@ -280,6 +282,7 @@ class CommentHandler(BlogHandler):
             self.render("cmmtpge.html", post = post)
         else:
             self.redirect("/login")
+
     def post(self, post_id):
         if self.user:
             comment = self.request.get('comment')
@@ -299,7 +302,7 @@ class CommentHandler(BlogHandler):
                 error = "Comments cannot be blank!!!"
                 self.render("cmmtpge.html", post = post, error = error)
         else:
-            self.redirect("/blog")
+            self.redirect("/login")
 
 # class ViewComments(BlogHandler):
 #     def get(self, post_id):
