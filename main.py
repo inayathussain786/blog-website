@@ -12,7 +12,8 @@ template_dir = os.path.join(os.path.dirname(__file__), 'templates')
 jinja_env = jinja2.Environment(loader = jinja2.FileSystemLoader(template_dir),
                                autoescape = True)
 
-secret = 'fart'
+file = open('secret.txt', 'r')
+secret = file.read()
 
 def render_str(template, **params):
     t = jinja_env.get_template(template)
@@ -213,53 +214,59 @@ class MyPosts(BlogHandler):
 
 class EditPosts(BlogHandler):
     def get(self, post_id):
-        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
-        post = db.get(key)
-        if not post:
-            self.error(404)
-            return
-        oldsubject = post.subject
-        oldcontent = post.content
-        if self.user.name == post.username:
-            self.render('editposts.html', post = post,
-                                          username = self.user.name,
-                                          oldsubject = oldsubject,
-                                          oldcontent = oldcontent)
-        else:
-            error = "You cannot edit this blog!!!"
-            self.render('editposts.html', post = post,
-                                          username = self.user.name,
-                                          oldsubject = oldsubject,
-                                          oldcontent = oldcontent,
-                                          error = error)
-
-    def post(self, post_id):
-        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
-        post = db.get(key)
-        if not post:
-            self.error(404)
-            return
-        oldsubject = post.subject
-        oldcontent = post.content
-        if self.user.name == post.username:
-            newsubject = self.request.get('subject')
-            newcontent = self.request.get('content')
+        if self.user:
             key = db.Key.from_path('Post', int(post_id), parent=blog_key())
             post = db.get(key)
             if not post:
                 self.error(404)
                 return
-            post.subject = newsubject
-            post.content = newcontent
-            post.put()
-            self.redirect('/blog/%s' % str(post_id))
+            oldsubject = post.subject
+            oldcontent = post.content
+            if self.user.name == post.username:
+                self.render('editposts.html', post = post,
+                                              username = self.user.name,
+                                              oldsubject = oldsubject,
+                                              oldcontent = oldcontent)
+            else:
+                error = "You cannot edit this blog!!!"
+                self.render('editposts.html', post = post,
+                                              username = self.user.name,
+                                              oldsubject = oldsubject,
+                                              oldcontent = oldcontent,
+                                              error = error)
         else:
-            error = "You cannot edit this blog!!!"
-            self.render('editposts.html', post = post,
-                                          username = self.user.name,
-                                          oldsubject = oldsubject,
-                                          oldcontent = oldcontent,
-                                          error = error)
+            self.redirect('/login')
+
+    def post(self, post_id):
+        if self.user:
+            key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+            post = db.get(key)
+            if not post:
+                self.error(404)
+                return
+            oldsubject = post.subject
+            oldcontent = post.content
+            if self.user.name == post.username:
+                newsubject = self.request.get('subject')
+                newcontent = self.request.get('content')
+                key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+                post = db.get(key)
+                if not post:
+                    self.error(404)
+                    return
+                post.subject = newsubject
+                post.content = newcontent
+                post.put()
+                self.redirect('/blog/%s' % str(post_id))
+            else:
+                error = "You cannot edit this blog!!!"
+                self.render('editposts.html', post = post,
+                                              username = self.user.name,
+                                              oldsubject = oldsubject,
+                                              oldcontent = oldcontent,
+                                              error = error)
+        else:
+            self.redirect('/login')
 
 class DeletePosts(BlogHandler):
     def get(self,post_id):
