@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html>
   <head>
     <title>Login</title>
@@ -7,13 +6,11 @@
       .label {text-align: right}
       .error {color: red}
     </style>
-
   </head>
-
-  <body>
+  <body align="center">
     <h2>Login</h2>
     <form method="post">
-      <table>
+      <table align="center">
         <tr>
           <td class="label">
             Username
@@ -22,7 +19,6 @@
             <input type="text" name="username" value="{{username}}">
           </td>
         </tr>
-
         <tr>
           <td class="label">
             Password
@@ -32,15 +28,13 @@
           </td>
         </tr>
       </table>
-
       <div class="error">
         {{error}}
       </div>
-
       <input type="submit">
     </form>
     <br>
+    <a href="/blog">Home</a>
     <a href="/signup">SignUp</a>
   </body>
-
 </html>

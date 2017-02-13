@@ -1,0 +1,16 @@
+<div class="post">
+    <div class="post-heading">
+      <div class="post-title">
+          <a href="#" class="subject">{{p.subject}}</a>
+      </div>
+      <div class="post-date">
+          {{p.created.strftime("%b %d, %Y")}}
+      </div>
+    </div>
+    <div class="post-content">
+        {{p._render_text | safe}}
+    </div>
+</div>
+<br>
+<a href="/blog/myposts/edit/{{ p.key().id() }}">Edit</a>
+<a href="/blog/myposts/delete/{{ p.key().id() }}">Delete</a>

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+    <h1 class="main-title">Edit blog</h1>
+    <div class="error"><h2>{{error}}</h2></div>
+    {% if post.username == username %}
+    <form method="post">
+        <label>
+            <div>subject</div>
+            <input type="text" name="subject" value="{{oldsubject}}">
+        </label>
+        <div class="error">{{error_subject}}</div>
+        <label>
+            <div>blog</div>
+            <textarea name="content">{{oldcontent}}</textarea>
+        </label>
+        <input type="submit" value="Update">
+        <a href="/blog/myposts">Cancel</a>
+    </form>
+    {% else %}
+    <form method="post">
+        <label>
+            <div>subject</div>
+            <input type="text" value="{{oldsubject}}" readonly>
+        </label>
+        <div class="error">{{error_subject}}</div>
+        <label>
+            <div>blog</div>
+            <textarea readonly>{{oldcontent}}</textarea>
+        </label>
+    </form>
+    {% endif %}
+{% endblock %}

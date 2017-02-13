@@ -3,11 +3,9 @@ import re
 import random
 import hashlib
 import hmac
-from string import letters
-
 import webapp2
 import jinja2
-
+from string import letters
 from google.appengine.ext import db
 
 template_dir = os.path.join(os.path.dirname(__file__), 'templates')
@@ -69,7 +67,6 @@ class MainPage(BlogHandler):
   def get(self):
       self.write('Hello, Udacity!')
 
-
 ##### user stuff
 def make_salt(length = 5):
     return ''.join(random.choice(letters) for x in xrange(length))
@@ -115,9 +112,7 @@ class User(db.Model):
         if u and valid_pw(name, pw, u.pw_hash):
             return u
 
-
 ##### blog stuff
-
 def blog_key(name = 'default'):
     return db.Key.from_path('blogs', name)
 
@@ -127,10 +122,30 @@ class Post(db.Model):
     created = db.DateTimeProperty(auto_now_add = True)
     last_modified = db.DateTimeProperty(auto_now = True)
     username = db.StringProperty()
+    likes = db.IntegerProperty()
+
+    @classmethod
+    def by_name(cls, subject):
+        u = Post.all().filter('subject =', subject).get()
+        return u
 
     def render(self):
         self._render_text = self.content.replace('\n', '<br>')
         return render_str("post.html", p = self)
+
+    def render1(self):
+        self._render_text = self.content.replace('\n', '<br>')
+        return render_str("post1.html", p = self)
+
+class Comment(db.Model):
+    username = db.StringProperty()
+    post_id = db.StringProperty()
+    comments = db.TextProperty()
+
+class Like(db.Model):
+    username = db.StringProperty()
+    post_id = db.StringProperty()
+    status = db.StringProperty()
 
 class BlogFront(BlogHandler):
     def get(self):
@@ -141,12 +156,13 @@ class PostPage(BlogHandler):
     def get(self, post_id):
         key = db.Key.from_path('Post', int(post_id), parent=blog_key())
         post = db.get(key)
-
         if not post:
             self.error(404)
             return
-
-        self.render("permalink.html", post = post)
+        if self.user:
+            self.render("permalink.html", post = post, username = self.user.name)
+        else:
+            self.redirect('/login')
 
 class NewPost(BlogHandler):
     def get(self):
@@ -161,13 +177,23 @@ class NewPost(BlogHandler):
 
         subject = self.request.get('subject')
         content = self.request.get('content')
-        username = self.request.get('username')
+        likes = "0"
 
         if subject and content:
-            p = Post(parent = blog_key(), subject = subject, content = content, username = username)
-            p.put()
-            blog_id = str(p.key().id())
-            self.redirect('/blog/%s' % blog_id)
+            u = Post.by_name(subject)
+            if u:
+                msg = 'Already used. Choose another subject'
+                self.render("newpost.html", error_subject = msg)
+            else:
+                #### inserting subject, content, username and no of likes
+                p = Post(parent = blog_key(),
+                        subject = subject,
+                        content = content,
+                        username = self.user.name,
+                        likes = int(likes))
+                p.put()
+                post_id = str(p.key().id())
+                self.redirect('/blog/%s' % post_id)
         else:
             error = "subject and content, please!"
             self.render("newpost.html", subject=subject, content=content, error=error)
@@ -175,15 +201,116 @@ class NewPost(BlogHandler):
 class MyPosts(BlogHandler):
     def get(self):
         if self.user:
-            username = self.request.get('username')
-            posts = db.GqlQuery("select * from Post where username='%s'" % username)
-            self.render("myposts.html" posts = posts)
+            posts = db.GqlQuery("select * from Post where username='%s' order by last_modified desc" % self.user.name)
+            self.render("myposts.html", posts = posts)
         else:
             self.redirect("/login")
 
     def post(self):
         if not self.user:
+            self.logout()
             self.redirect('/blog')
+
+class EditPosts(BlogHandler):
+    def get(self, post_id):
+        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+        post = db.get(key)
+        if not post:
+            self.error(404)
+            return
+        oldsubject = post.subject
+        oldcontent = post.content
+        if self.user.name == post.username:
+            self.render('editposts.html', post = post,
+                                          username = self.user.name,
+                                          oldsubject = oldsubject,
+                                          oldcontent = oldcontent)
+        else:
+            error = "You cannot edit this blog!!!"
+            self.render('editposts.html', post = post,
+                                          username = self.user.name,
+                                          oldsubject = oldsubject,
+                                          oldcontent = oldcontent,
+                                          error = error)
+
+    def post(self, post_id):
+        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+        post = db.get(key)
+        if not post:
+            self.error(404)
+            return
+        oldsubject = post.subject
+        oldcontent = post.content
+        if self.user.name == post.username:
+            newsubject = self.request.get('subject')
+            newcontent = self.request.get('content')
+            key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+            post = db.get(key)
+            if not post:
+                self.error(404)
+                return
+            post.subject = newsubject
+            post.content = newcontent
+            post.put()
+            self.redirect('/blog/%s' % str(post_id))
+        else:
+            error = "You cannot edit this blog!!!"
+            self.render('editposts.html', post = post,
+                                          username = self.user.name,
+                                          oldsubject = oldsubject,
+                                          oldcontent = oldcontent,
+                                          error = error)
+
+class DeletePosts(BlogHandler):
+    def get(self,post_id):
+        if self.user:
+            key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+            post = db.get(key)
+            post.delete()
+            self.redirect('/blog/myposts')
+
+class CommentHandler(BlogHandler):
+    def get(self, post_id):
+        if self.user:
+            key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+            post = db.get(key)
+            if not post:
+                self.error(404)
+                return
+            self.render("cmmtpge.html", post = post)
+        else:
+            self.redirect("/login")
+    def post(self, post_id):
+        if self.user:
+            comment = self.request.get('comment')
+            key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+            post = db.get(key)
+            if not post:
+                self.error(404)
+                return
+            if comment:
+                q = Comment(parent = blog_key(),
+                                username = self.user.name,
+                                post_id = str(post_id),
+                                comments = comment)
+                q.put()
+                self.redirect('/blog/%s' % str(post_id))
+            else:
+                error = "Comments cannot be blank!!!"
+                self.render("cmmtpge.html", post = post, error = error)
+        else:
+            self.redirect("/blog")
+
+# class ViewComments(BlogHandler):
+#     def get(self, post_id):
+#         if not self.user:
+#             self.redirect('/blog')
+#         key = db.Key.from_path('Comment', int(post_id), parent=blog_key())
+#         post = db.get(key)
+#         if not post:
+#             self.error(404)
+#             return
+#         self.render("allcmmts.html", post = post)
 
 ###### Unit 2 HW's
 class Rot13(BlogHandler):
@@ -197,7 +324,6 @@ class Rot13(BlogHandler):
             rot13 = text.encode('rot13')
 
         self.render('rot13-form.html', text = rot13)
-
 
 USER_RE = re.compile(r"^[a-zA-Z0-9_-]{3,20}$")
 def valid_username(username):
@@ -314,6 +440,10 @@ app = webapp2.WSGIApplication([('/', MainPage),
                                ('/blog/([0-9]+)', PostPage),
                                ('/blog/newpost', NewPost),
                                ('/blog/myposts', MyPosts),
+                               ('/blog/myposts/edit/([0-9]+)', EditPosts),
+                               ('/blog/myposts/delete/([0-9]+)', DeletePosts),
+                               ('/blog/([0-9]+)/comment', CommentHandler),
+                               #('/blog/[0-9]+/allcomments', ViewComments),
                                ('/signup', Register),
                                ('/login', Login),
                                ('/logout', Logout),
