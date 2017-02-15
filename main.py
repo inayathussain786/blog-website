@@ -130,6 +130,7 @@ class Post(db.Model):
     last_modified = db.DateTimeProperty(auto_now = True)
     username = db.StringProperty()
     likes = db.IntegerProperty()
+    liked_by = db.ListProperty(str)
 
     @classmethod
     def by_name(cls, subject):
@@ -140,36 +141,93 @@ class Post(db.Model):
         self._render_text = self.content.replace('\n', '<br>')
         return render_str("post.html", p = self)
 
-    def render1(self):
-        self._render_text = self.content.replace('\n', '<br>')
-        return render_str("post1.html", p = self)
-
 class Comment(db.Model):
     username = db.StringProperty()
     post_id = db.StringProperty()
-    comments = db.TextProperty()
+    comment = db.TextProperty()
+    created = db.DateTimeProperty(auto_now_add = True)
+    last_modified = db.DateTimeProperty(auto_now = True)
 
-class Like(db.Model):
-    username = db.StringProperty()
-    post_id = db.StringProperty()
-    status = db.StringProperty()
+    def render(self):
+        self.comment = self.comment.replace('\n', '<br>')
+        return render_str("post2.html", c = self)
 
 class BlogFront(BlogHandler):
     def get(self):
-        posts = greetings = Post.all().order('-created')
+        # posts = greetings = Post.all().order('-created')
+        posts = db.GqlQuery(
+            "select * from Post order by created desc limit 20")
         self.render('front.html', posts = posts)
 
 class PostPage(BlogHandler):
     def get(self, post_id):
-        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
-        post = db.get(key)
-        if not post:
-            self.error(404)
-            return
         if self.user:
-            self.render("permalink.html", post = post, username = self.user.name)
+            key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+            post = db.get(key)
+            if not post:
+                self.error(404)
+                return
+            likes = post.likes
+            status = ""
+            comments = db.GqlQuery("select * from Comment where\
+                                    post_id='%s' order by created" % post_id)
+            if post.username != self.user.name:
+                if self.user.name not in post.liked_by:
+                    status = "unliked"
+                else:
+                    status = "liked"
+            self.render("permalink.html", post = post,
+                                          username = self.user.name,
+                                          likes = likes,
+                                          comments = comments,
+                                          status = status)
         else:
             self.redirect('/login')
+
+    def post(self, post_id):
+        if self.user:
+            comment = self.request.get('comment')
+            key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+            post = db.get(key)
+            if not post:
+                self.error(404)
+                return
+            comments = db.GqlQuery("select * from Comment where\
+                                    post_id='%s' order by created" % post_id)
+            if post.username != self.user.name:
+                if self.user.name not in post.liked_by:
+                    status = "liked"
+                    post.liked_by.append(self.user.name)
+                    self.render("permalink.html", post = post,
+                                              username = self.user.name,
+                                              likes = post.likes,
+                                              comments = comments,
+                                              status = status)
+                else:
+                    status = "unliked"
+                    post.liked_by.remove(self.user.name)
+                    self.render("permalink.html", post = post,
+                                              username = self.user.name,
+                                              likes = post.likes,
+                                              comments = comments,
+                                              status = status)
+            if comment:
+                q = Comment(parent = blog_key(),
+                            username = self.user.name,
+                            post_id = str(post_id),
+                            comment = comment)
+                q.put()
+                self.redirect('/blog/%s' % str(post_id))
+            else:
+                error = "Comments cannot be blank!!!"
+                self.render("permalink.html", post = post,
+                                              username = self.user.name,
+                                              likes = post.likes,
+                                              comments = comments,
+                                              status = status,
+                                              error = error)
+        else:
+            self.redirect("/login")
 
 class NewPost(BlogHandler):
     def get(self):
@@ -180,7 +238,7 @@ class NewPost(BlogHandler):
 
     def post(self):
         if not self.user:
-            self.redirect('/login')
+            return self.redirect('/login')
 
         subject = self.request.get('subject')
         content = self.request.get('content')
@@ -197,7 +255,8 @@ class NewPost(BlogHandler):
                         subject = subject,
                         content = content,
                         username = self.user.name,
-                        likes = int(likes))
+                        likes = int(likes),
+                        liked_by = [])
                 p.put()
                 post_id = str(p.key().id())
                 self.redirect('/blog/%s' % post_id)
@@ -215,8 +274,7 @@ class MyPosts(BlogHandler):
 
     def post(self):
         if not self.user:
-            self.logout()
-            self.redirect('/login')
+            return self.redirect('/login')
 
 class EditPosts(BlogHandler):
     def get(self, post_id):
@@ -255,11 +313,6 @@ class EditPosts(BlogHandler):
             if self.user.name == post.username:
                 newsubject = self.request.get('subject')
                 newcontent = self.request.get('content')
-                key = db.Key.from_path('Post', int(post_id), parent=blog_key())
-                post = db.get(key)
-                if not post:
-                    self.error(404)
-                    return
                 post.subject = newsubject
                 post.content = newcontent
                 post.put()
@@ -282,9 +335,15 @@ class DeletePosts(BlogHandler):
             if not post:
                 self.error(404)
                 return
+            key1 = db.Key.from_path('Comment', int(post_id), parent=blog_key())
+            comment = db.get(key)
+            if not comment:
+                self.error(404)
+                return
             if self.user.name == post.username:
                 post.delete()
-                self.redirect('/blog/myposts')
+                comment.delete()
+                return self.redirect('/blog/myposts')
             else:
                 self.redirect('/login')
         else:
@@ -298,7 +357,11 @@ class CommentHandler(BlogHandler):
             if not post:
                 self.error(404)
                 return
-            self.render("cmmtpge.html", post = post)
+            comments = db.GqlQuery("select * from Comment where\
+                                    post_id='%s' order by created" % post_id)
+            self.render("permalink.html", post = post,
+                                          username = self.user.name,
+                                          comments = comments)
         else:
             self.redirect("/login")
 
@@ -312,27 +375,21 @@ class CommentHandler(BlogHandler):
                 return
             if comment:
                 q = Comment(parent = blog_key(),
-                                username = self.user.name,
-                                post_id = str(post_id),
-                                comments = comment)
+                            username = self.user.name,
+                            post_id = str(post_id),
+                            comment = comment)
                 q.put()
                 self.redirect('/blog/%s' % str(post_id))
             else:
-                error = "Comments cannot be blank!!!"
-                self.render("cmmtpge.html", post = post, error = error)
+                error1 = "Comments cannot be blank!!!"
+                comments = db.GqlQuery("select * from Comment where\
+                                        post_id='%s' order by created" % post_id)
+                self.render("permalink.html", post = post,
+                                              username = self.user.name,
+                                              comments = comments,
+                                              error1 = error1)
         else:
             self.redirect("/login")
-
-# class ViewComments(BlogHandler):
-#     def get(self, post_id):
-#         if not self.user:
-#             self.redirect('/blog')
-#         key = db.Key.from_path('Comment', int(post_id), parent=blog_key())
-#         post = db.get(key)
-#         if not post:
-#             self.error(404)
-#             return
-#         self.render("allcmmts.html", post = post)
 
 ###### Unit 2 HW's
 class Rot13(BlogHandler):
@@ -465,7 +522,6 @@ app = webapp2.WSGIApplication([('/', MainPage),
                                ('/blog/myposts/edit/([0-9]+)', EditPosts),
                                ('/blog/myposts/delete/([0-9]+)', DeletePosts),
                                ('/blog/([0-9]+)/comment', CommentHandler),
-                               #('/blog/[0-9]+/allcomments', ViewComments),
                                ('/signup', Register),
                                ('/login', Login),
                                ('/logout', Logout),

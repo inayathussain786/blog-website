@@ -1,0 +1,7 @@
+<div class="post">
+      <div class="post-title">
+          {{ c.username }}-{{ c.created.strftime("%b %d, %Y") }}
+      </div>
+      {{ c.comment | safe }}
+    </div>
+</div>

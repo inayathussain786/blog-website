@@ -4,7 +4,7 @@
         My Blogs
     </h1>
     {% for p in posts %}
-        {{ p.render1() | safe }}
+        {{ p.render() | safe }}
         <br><br>
     {% endfor %}
 {% endblock %}

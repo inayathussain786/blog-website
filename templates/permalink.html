@@ -4,10 +4,28 @@
     <h2>{{error}}</h2>
     {{post.render() | safe}}
     <br>
+    <p>{{ likes }}&nbsp;likes</p>
     {% if post.username != username %}
-    <a href="/blog/{{post.key().id()}}">{{status}}</a>
-    <a href="/blog/{{post.key().id()}}/comment">Comment</a>
+        {% if status == "unliked" %}
+            <a href="/blog/{{ post.key().id() }}">Like</a>
+        {% elif status == "liked" %}
+            <a href="/blog/{{ post.key().id() }}">Unlike</a>
+        {% endif %}
+        <p align="right">by&nbsp;{{post.username}}</p>
+        <form method="post">
+            <label>
+                <textarea name="comment" required></textarea>
+            </label>
+            <div class="error">{{error1}}</div>
+            <input type="submit" value="Comment">
+        </form>
+    {% else %}
+        <p align="right"><a href="/blog/myposts/edit/{{ post.key().id() }}">Edit</a>
+        <a href="/blog/myposts/delete/{{ post.key().id() }}">Delete</a></p>
     {% endif %}
-    <p align="right">by&nbsp;{{post.username}}</p>
-    <!-- <a href="/blog/{{post.key().id()}}/allcomments">View all comments</a> -->
+    <h2>Comments on this blog:</h2>
+    {% for c in comments %}
+        {{ c.render() | safe }}
+        <br><br>
+    {% endfor %}
 {% endblock %}
