@@ -167,20 +167,12 @@ class PostPage(BlogHandler):
             if not post:
                 self.error(404)
                 return
-            likes = post.likes
-            status = ""
             comments = db.GqlQuery("select * from Comment where\
                                     post_id='%s' order by created" % post_id)
-            if post.username != self.user.name:
-                if self.user.name not in post.liked_by:
-                    status = "unliked"
-                else:
-                    status = "liked"
             self.render("permalink.html", post = post,
                                           username = self.user.name,
-                                          likes = likes,
-                                          comments = comments,
-                                          status = status)
+                                          likes = post.likes,
+                                          comments = comments)
         else:
             self.redirect('/login')
 
@@ -194,38 +186,31 @@ class PostPage(BlogHandler):
                 return
             comments = db.GqlQuery("select * from Comment where\
                                     post_id='%s' order by created" % post_id)
-            if post.username != self.user.name:
-                if self.user.name not in post.liked_by:
-                    status = "liked"
-                    post.liked_by.append(self.user.name)
-                    self.render("permalink.html", post = post,
-                                              username = self.user.name,
-                                              likes = post.likes,
-                                              comments = comments,
-                                              status = status)
-                else:
-                    status = "unliked"
-                    post.liked_by.remove(self.user.name)
-                    self.render("permalink.html", post = post,
-                                              username = self.user.name,
-                                              likes = post.likes,
-                                              comments = comments,
-                                              status = status)
-            if comment:
-                q = Comment(parent = blog_key(),
-                            username = self.user.name,
-                            post_id = str(post_id),
-                            comment = comment)
-                q.put()
+            if self.request.get('like'):
+                post.liked_by.append(self.user.name)
+                post.likes += 1
+                post.put()
                 self.redirect('/blog/%s' % str(post_id))
-            else:
-                error = "Comments cannot be blank!!!"
-                self.render("permalink.html", post = post,
-                                              username = self.user.name,
-                                              likes = post.likes,
-                                              comments = comments,
-                                              status = status,
-                                              error = error)
+            if self.request.get('unlike'):
+                post.liked_by.remove(self.user.name)
+                post.likes -= 1
+                post.put()
+                self.redirect('/blog/%s' % str(post_id))
+            if self.request.get('addComment'):
+                if comment:
+                    q = Comment(parent = blog_key(),
+                                username = self.user.name,
+                                post_id = str(post_id),
+                                comment = comment)
+                    q.put()
+                    self.redirect('/blog/%s' % str(post_id))
+                else:
+                    error = "Comments cannot be blank!!!"
+                    self.render("permalink.html", post = post,
+                                                  username = self.user.name,
+                                                  likes = post.likes,
+                                                  comments = comments,
+                                                  error = error)
         else:
             self.redirect("/login")
 
@@ -242,7 +227,6 @@ class NewPost(BlogHandler):
 
         subject = self.request.get('subject')
         content = self.request.get('content')
-        likes = "0"
 
         if subject and content:
             u = Post.by_name(subject)
@@ -255,7 +239,7 @@ class NewPost(BlogHandler):
                         subject = subject,
                         content = content,
                         username = self.user.name,
-                        likes = int(likes),
+                        likes = 0,
                         liked_by = [])
                 p.put()
                 post_id = str(p.key().id())
@@ -267,7 +251,8 @@ class NewPost(BlogHandler):
 class MyPosts(BlogHandler):
     def get(self):
         if self.user:
-            posts = db.GqlQuery("select * from Post where username='%s' order by last_modified desc" % self.user.name)
+            posts = db.GqlQuery("select * from Post where username='%s' \
+                order by last_modified desc" % self.user.name)
             self.render("myposts.html", posts = posts)
         else:
             self.redirect("/login")
@@ -373,6 +358,8 @@ class CommentHandler(BlogHandler):
             if not post:
                 self.error(404)
                 return
+            comments = db.GqlQuery("select * from Comment where\
+                                        post_id='%s' order by created" % post_id)
             if comment:
                 q = Comment(parent = blog_key(),
                             username = self.user.name,
@@ -382,8 +369,6 @@ class CommentHandler(BlogHandler):
                 self.redirect('/blog/%s' % str(post_id))
             else:
                 error1 = "Comments cannot be blank!!!"
-                comments = db.GqlQuery("select * from Comment where\
-                                        post_id='%s' order by created" % post_id)
                 self.render("permalink.html", post = post,
                                               username = self.user.name,
                                               comments = comments,
@@ -391,18 +376,87 @@ class CommentHandler(BlogHandler):
         else:
             self.redirect("/login")
 
-###### Unit 2 HW's
-class Rot13(BlogHandler):
-    def get(self):
-        self.render('rot13-form.html')
+class EditComment(BlogHandler):
+    def get(self, post_id, comment_id):
+        if self.user:
+            key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+            post = db.get(key)
+            if not post:
+                self.error(404)
+                return
+            key1 = db.Key.from_path('Comment', int(comment_id), parent=blog_key())
+            comment = db.get(key)
+            if not comment:
+                self.error(404)
+                return
+            oldsubject = post.subject
+            oldcontent = post.content
+            if self.user.name == post.username:
+                self.render('editcomment.html', post = post,
+                                                username = self.user.name,
+                                                oldcomment = oldcomment)
+            else:
+                error = "You cannot edit this blog!!!"
+                self.render('editposts.html', post = post,
+                                              username = self.user.name,
+                                              oldsubject = oldsubject,
+                                              oldcontent = oldcontent,
+                                              error = error)
+        else:
+            self.redirect('/login')
 
-    def post(self):
-        rot13 = ''
-        text = self.request.get('text')
-        if text:
-            rot13 = text.encode('rot13')
+    def post(self, post_id, comment_id):
+        if self.user:
+            key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+            post = db.get(key)
+            if not post:
+                self.error(404)
+                return
+            oldsubject = post.subject
+            oldcontent = post.content
+            if self.user.name == post.username:
+                newsubject = self.request.get('subject')
+                newcontent = self.request.get('content')
+                post.subject = newsubject
+                post.content = newcontent
+                post.put()
+                self.redirect('/blog/%s' % str(post_id))
+            else:
+                error = "You cannot edit this blog!!!"
+                self.render('editposts.html', post = post,
+                                              username = self.user.name,
+                                              oldsubject = oldsubject,
+                                              oldcontent = oldcontent,
+                                              error = error)
+        else:
+            self.redirect('/login')
 
-        self.render('rot13-form.html', text = rot13)
+class DeleteComment(BlogHandler):
+    def get(self,post_id):
+        if self.user:
+            key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+            post = db.get(key)
+            if not post:
+                self.error(404)
+                return
+            key1 = db.Key.from_path('Comment', int(post_id), parent=blog_key())
+            comment = db.get(key)
+            if not comment:
+                self.error(404)
+                return
+            comments = db.GqlQuery("select * from Comment where\
+                                        post_id='%s' order by created" % post_id)
+            if self.user.name == post.username:
+                comment.delete()
+                self.redirect('/blog/%s' % str(post_id))
+            else:
+                error = "You cannot edit or delete posts made by other users!!!"
+                self.render("permalink.html", post = post,
+                                              username = self.user.name,
+                                              comments = comments,
+                                              error = error)
+        else:
+            self.redirect('/login')
 
 USER_RE = re.compile(r"^[a-zA-Z0-9_-]{3,20}$")
 def valid_username(username):
@@ -453,10 +507,6 @@ class Signup(BlogHandler):
     def done(self, *a, **kw):
         raise NotImplementedError
 
-class Unit2Signup(Signup):
-    def done(self):
-        self.redirect('/unit2/welcome?username=' + self.username)
-
 class Register(Signup):
     def done(self):
         #make sure the user doesn't already exist
@@ -492,29 +542,7 @@ class Logout(BlogHandler):
         self.logout()
         self.redirect('/blog')
 
-class Unit3Welcome(BlogHandler):
-    def get(self):
-        if self.user:
-            self.render('welcome.html', username = self.user.name)
-        else:
-            self.redirect('/error')
-
-class ErrorHandler(BlogHandler):
-    def get(self):
-        self.render('error.html')
-
-class Welcome(BlogHandler):
-    def get(self):
-        username = self.request.get('username')
-        if valid_username(username):
-            self.render('welcome.html', username = username)
-        else:
-            self.redirect('/unit2/signup')
-
 app = webapp2.WSGIApplication([('/', MainPage),
-                               ('/unit2/rot13', Rot13),
-                               ('/unit2/signup', Unit2Signup),
-                               ('/unit2/welcome', Welcome),
                                ('/blog/?', BlogFront),
                                ('/blog/([0-9]+)', PostPage),
                                ('/blog/newpost', NewPost),
@@ -522,9 +550,9 @@ app = webapp2.WSGIApplication([('/', MainPage),
                                ('/blog/myposts/edit/([0-9]+)', EditPosts),
                                ('/blog/myposts/delete/([0-9]+)', DeletePosts),
                                ('/blog/([0-9]+)/comment', CommentHandler),
+                               ('/blog/([0-9]+)/comment/edit', EditComment),
+                               ('/blog/([0-9]+)/comment/delete', DeleteComment),
                                ('/signup', Register),
                                ('/login', Login),
-                               ('/logout', Logout),
-                               ('/unit3/welcome', Unit3Welcome),
-                               ('/error', ErrorHandler)],
+                               ('/logout', Logout)],
                               debug=True)
