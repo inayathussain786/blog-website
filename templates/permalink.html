@@ -6,26 +6,34 @@
     <br>
     <p>{{ likes }}&nbsp;likes</p>
     {% if post.username != username %}
-        {% if status == "unliked" %}
-            <a href="/blog/{{ post.key().id() }}">Like</a>
-        {% elif status == "liked" %}
-            <a href="/blog/{{ post.key().id() }}">Unlike</a>
-        {% endif %}
-        <p align="right">by&nbsp;{{post.username}}</p>
         <form method="post">
-            <label>
-                <textarea name="comment" required></textarea>
-            </label>
-            <div class="error">{{error1}}</div>
-            <input type="submit" value="Comment">
+        {% if username not in post.liked_by %}
+            <input type="submit" name="like" value="Like">
+        {% else %}
+            <input type="submit" name="unlike" value="Unlike">
+        {% endif %}
         </form>
+        <p align="right">by&nbsp;{{post.username}}</p>
     {% else %}
         <p align="right"><a href="/blog/myposts/edit/{{ post.key().id() }}">Edit</a>
         <a href="/blog/myposts/delete/{{ post.key().id() }}">Delete</a></p>
     {% endif %}
+    <form method="post">
+        <label>
+            <textarea name="comment" required></textarea>
+        </label>
+        <div class="error">{{error1}}</div>
+        <input type="submit" name="addComment" value="Comment">
+    </form>
     <h2>Comments on this blog:</h2>
     {% for c in comments %}
+        <hr>
         {{ c.render() | safe }}
-        <br><br>
+        {% if c.username == username %}
+            <p align="right">
+            <a href="/blog/{{ post.key().id() }}/editcomment/{{ c.key().id() }}">Edit</a> |
+            <a href="/blog/{{ post.key().id() }}/deletecomment/{{ c.key().id() }}">Delete</a>
+            </p>
+        {% endif %}
     {% endfor %}
 {% endblock %}
