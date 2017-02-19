@@ -178,7 +178,6 @@ class PostPage(BlogHandler):
 
     def post(self, post_id):
         if self.user:
-            comment = self.request.get('comment')
             key = db.Key.from_path('Post', int(post_id), parent=blog_key())
             post = db.get(key)
             if not post:
@@ -197,6 +196,7 @@ class PostPage(BlogHandler):
                 post.put()
                 self.redirect('/blog/%s' % str(post_id))
             if self.request.get('addComment'):
+                comment = self.request.get('comment')
                 if comment:
                     q = Comment(parent = blog_key(),
                                 username = self.user.name,
@@ -385,23 +385,23 @@ class EditComment(BlogHandler):
                 self.error(404)
                 return
             key1 = db.Key.from_path('Comment', int(comment_id), parent=blog_key())
-            comment = db.get(key)
+            comment = db.get(key1)
             if not comment:
                 self.error(404)
                 return
-            oldsubject = post.subject
-            oldcontent = post.content
-            if self.user.name == post.username:
+            oldcomment = comment.comment
+            if self.user.name == comment.username:
                 self.render('editcomment.html', post = post,
+                                                comment = comment,
                                                 username = self.user.name,
                                                 oldcomment = oldcomment)
             else:
-                error = "You cannot edit this blog!!!"
-                self.render('editposts.html', post = post,
-                                              username = self.user.name,
-                                              oldsubject = oldsubject,
-                                              oldcontent = oldcontent,
-                                              error = error)
+                error = "You cannot edit this comment!!!"
+                self.render('editcomment.html', post = post,
+                                                comment = comment,
+                                                username = self.user.name,
+                                                oldcomment = oldcomment,
+                                                error = error)
         else:
             self.redirect('/login')
 
@@ -412,47 +412,50 @@ class EditComment(BlogHandler):
             if not post:
                 self.error(404)
                 return
-            oldsubject = post.subject
-            oldcontent = post.content
-            if self.user.name == post.username:
-                newsubject = self.request.get('subject')
-                newcontent = self.request.get('content')
-                post.subject = newsubject
-                post.content = newcontent
-                post.put()
+            key1 = db.Key.from_path('Comment', int(comment_id), parent=blog_key())
+            comment = db.get(key1)
+            if not comment:
+                self.error(404)
+                return
+            oldcomment = comment.comment
+            if self.user.name == comment.username:
+                newcomment = self.request.get('comment')
+                comment.comment = newcomment
+                comment.put()
                 self.redirect('/blog/%s' % str(post_id))
             else:
-                error = "You cannot edit this blog!!!"
-                self.render('editposts.html', post = post,
+                error = "You cannot edit this comment!!!"
+                self.render('editcomment.html', post = post,
                                               username = self.user.name,
-                                              oldsubject = oldsubject,
-                                              oldcontent = oldcontent,
+                                              comment = comment,
+                                              oldcomment = oldcomment,
                                               error = error)
         else:
             self.redirect('/login')
 
 class DeleteComment(BlogHandler):
-    def get(self,post_id):
+    def get(self,post_id,comment_id):
         if self.user:
             key = db.Key.from_path('Post', int(post_id), parent=blog_key())
             post = db.get(key)
             if not post:
                 self.error(404)
                 return
-            key1 = db.Key.from_path('Comment', int(post_id), parent=blog_key())
-            comment = db.get(key)
+            key1 = db.Key.from_path('Comment', int(comment_id), parent=blog_key())
+            comment = db.get(key1)
             if not comment:
                 self.error(404)
                 return
             comments = db.GqlQuery("select * from Comment where\
                                         post_id='%s' order by created" % post_id)
-            if self.user.name == post.username:
+            if self.user.name == comment.username:
                 comment.delete()
                 self.redirect('/blog/%s' % str(post_id))
             else:
-                error = "You cannot edit or delete posts made by other users!!!"
+                error = "You cannot delete posts made by other users!!!"
                 self.render("permalink.html", post = post,
                                               username = self.user.name,
+                                              likes = post.likes,
                                               comments = comments,
                                               error = error)
         else:
@@ -550,8 +553,8 @@ app = webapp2.WSGIApplication([('/', MainPage),
                                ('/blog/myposts/edit/([0-9]+)', EditPosts),
                                ('/blog/myposts/delete/([0-9]+)', DeletePosts),
                                ('/blog/([0-9]+)/comment', CommentHandler),
-                               ('/blog/([0-9]+)/comment/edit', EditComment),
-                               ('/blog/([0-9]+)/comment/delete', DeleteComment),
+                               ('/blog/([0-9]+)/editcomment/([0-9]+)', EditComment),
+                               ('/blog/([0-9]+)/deletecomment/([0-9]+)', DeleteComment),
                                ('/signup', Register),
                                ('/login', Login),
                                ('/logout', Logout)],
